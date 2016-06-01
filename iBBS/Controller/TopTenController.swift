@@ -2,8 +2,8 @@
 //  TopTenController.swift
 //  iBBS
 //
-//  Created by zm on 12/6/15.
-//  Copyright © 2015 zm. All rights reserved.
+//  Created by zm on 6/1/16.
+//  Copyright © 2016 zm. All rights reserved.
 //
 
 import UIKit
@@ -15,16 +15,8 @@ class TopTenController: UITableViewController {
     
     var data: [AnyObject] = [AnyObject]()
     var loading: Bool = false
-    let oauth_token = KeychainWrapper.stringForKey("oauth_token")!
-    
-    func getDefaultData() {
-        let articleDal = ArticleDal()
-        let result = articleDal.getArticleList()
-        if result != nil {
-            self.data = result!
-            self.tableView.reloadData()
-        }
-    }
+    let oauth_token = KeychainWrapper.stringForKey("oauth_token")
+
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -50,6 +42,15 @@ class TopTenController: UITableViewController {
         
     }
     
+    func getDefaultData() {
+        let articleDal = ArticleDal()
+        let result = articleDal.getArticleList()
+        if result != nil {
+            self.data = result!
+            self.tableView.reloadData()
+        }
+    }
+    
     override func didReceiveMemoryWarning() {
         super.didReceiveMemoryWarning()
     }
@@ -67,7 +68,12 @@ class TopTenController: UITableViewController {
 //        let url: String = "http://bbs.byr.cn/open/widget/topten.json?oauth_token=27908c21fc753925f85eb75ae8f4618c"
 //        oauth_token = KeychainWrapper.stringForKey("oauth_token")
 //        print("TopTen: \(oauth_token)")
-        let url = "http://bbs.byr.cn/open/widget/topten.json?oauth_token=\(oauth_token)"
+        if oauth_token == nil {
+//            重新授权
+            let vc = AuthViewController()
+            self.presentViewController(vc, animated: true, completion: nil)
+        }
+        let url = "http://bbs.byr.cn/open/widget/topten.json?oauth_token=\(oauth_token!)"
         Alamofire.request(NSURLRequest(URL: NSURL(string: url)!)).responseJSON {
             closureResponse in
             self.loading = false
@@ -83,21 +89,28 @@ class TopTenController: UITableViewController {
                 self.presentViewController(ac, animated: true, completion: nil)
                 return
             }
+            
             let json = closureResponse.result.value
             var result = JSON(json!)
 //            print(result)
-            let items = result["article"].object as! [AnyObject]
-            
-            
-            if (isPullRefresh) {
-                let articleDal = ArticleDal()
-                articleDal.deleteAll()
-                articleDal.addArticleList(items)
-                self.data.removeAll(keepCapacity: false)
-            }
-            
-            for item in items {
-                self.data.append(item)
+            if (result["msg"] != nil && result["msg"].object.containsString("过期")) {
+                let vc = AuthViewController()
+                self.presentViewController(vc, animated: true, completion: nil)
+
+            } else {
+                
+                let items = result["article"].object as! [AnyObject]
+
+                if (isPullRefresh) {
+                    let articleDal = ArticleDal()
+                    articleDal.deleteAll()
+                    articleDal.addArticleList(items)
+                    self.data.removeAll(keepCapacity: false)
+                }
+                
+                for item in items {
+                    self.data.append(item)
+                }
             }
 //            let user = result["article"]["user"].object as! [AnyObject]
 //            for i in user {
@@ -110,9 +123,10 @@ class TopTenController: UITableViewController {
         }
     }
     
+//    获取用户的信息
     func loadData() {
         
-        let url = "http://bbs.byr.cn/open/user/getinfo.json?oauth_token=\(oauth_token)"
+        let url = "http://bbs.byr.cn/open/user/getinfo.json?oauth_token=\(oauth_token!)"
         Alamofire.request(NSURLRequest(URL: NSURL(string: url)!)).responseJSON{
             closureResponse in
             
@@ -124,7 +138,11 @@ class TopTenController: UITableViewController {
             } else {
                 let json = closureResponse.result.value
                 let result = JSON(json!)
-                if result !=  nil {
+                if (result["msg"] != nil && result["msg"].object.containsString("过期")) {
+                    let vc = AuthViewController()
+                    self.presentViewController(vc, animated: true, completion: nil)
+                } else {
+                    
                     let userDal = UserDal()
                     userDal.addUser(result, save: true)
                 }
